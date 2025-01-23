@@ -101,6 +101,23 @@ fn Chan(comptime T: type) type {
             return;
         }
 
+        pub fn justSend(self: *Self, data: T) ChanError!void {
+            if (self.closed) return ChanError.Closed;
+            self.mut.lock();
+            errdefer self.mut.unlock();
+
+            // case: receiver already waiting
+            // pull receiver (if any) and give it data. Signal receiver that it's done waiting.
+            if (self.recvQ.items.len > 0) {
+                defer self.mut.unlock();
+                var receiver: *rType = self.recvQ.orderedRemove(0);
+                receiver.putDataAndSignal(data);
+                return;
+            }
+            // no receiver waiting. Just return
+            return;
+        }
+
         pub fn recv(self: *Self) ChanError!T {
             if (self.closed) return ChanError.Closed;
             self.mut.lock();
@@ -133,6 +150,24 @@ fn Chan(comptime T: type) type {
             } else {
                 return ChanError.DataCorruption;
             }
+        }
+
+        pub fn justRecv(self: *Self) ChanError!?T {
+            if (self.closed) return null;
+            self.mut.lock();
+            errdefer self.mut.unlock();
+
+            // case: sender already waiting
+            // pull sender and take its data. Signal sender that it's done waiting.
+            if (self.sendQ.items.len > 0) {
+                defer self.mut.unlock();
+                var sender: *sType = self.sendQ.orderedRemove(0);
+                const data: T = sender.getDataAndSignal();
+                return data;
+            }
+
+            // no sender waiting. Just return null
+            return null;
         }
     };
 }
