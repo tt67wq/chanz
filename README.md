@@ -36,6 +36,35 @@ std.debug.print("{d} Main Sending {d}\n", .{ std.time.milliTimestamp(), val });
 try chan.send(val);
 ```
 
+Or you can use none blocking methods `chan.justSend()` and `chan.justRecv()` which will not wait for a receiver or sender.
+
+```c++
+// create channel of u8 type
+const T = Chan(struct{});
+var stopper = T.init(std.testing.allocator);
+defer stopper.deinit();
+
+const thread = struct {
+    fn func(c: *T)!void {
+        while(true) {
+            if (try c.justRecv()) |_| {
+                std.debug.print("got stop signal\n",.{});
+                return;
+            }
+            std.debug.print("keep waiting stop signal\n",.{});
+            try std.time.sleep(5 * std.time.ns_per_s);
+        }
+    }
+};
+
+const t = try std.Thread.spawn(.{}, thread.func, .{&stopper});
+defer t.join();
+
+// let thread wait a bit before sending value
+std.time.sleep(10 * std.time.ns_per_s);
+try stopper.send(struct{}{});
+```
+
 ## Features
 
 ### Buffered Chan
